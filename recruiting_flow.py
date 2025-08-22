@@ -1,18 +1,20 @@
+
 import time
 import os
 from api import api_request
 from fireflies import Fireflies
-from new_config import RECRUITING_TOKENS
 from help_functions import push_note, download_file, gdrive_upload, crm_add_attachment, mark_as_synced
 from gcalendar import find_event_attendees
 from bq import insert_to_bigquery, get_data_from_bq, run_query
 from queries import synced_events_q, delete_logs_q
 from datetime import datetime, timedelta
+from secret_manager import access_secret
+import json
+from google.cloud import bigquery
+from google.oauth2 import service_account
 
 skip_ids = ["1721122200000"]
 folder_id = "1WiB5EqCrQ2eJlKsHuNNKfly6-8jbfSRf"
-
-
 
 
 def launch():
@@ -20,10 +22,19 @@ def launch():
     start_date = datetime.now() - timedelta(days=daycount)
     start_date = str(start_date)[0:10]
     transcript_query = '{"query": "query Transcripts($limit: Int $fromDate: DateTime) { transcripts(limit: $limit fromDate: $fromDate) { title id calendar_id date duration host_email transcript_url audio_url video_url participants  meeting_attendees { email } calendar_id summary { action_items keywords outline overview shorthand_bullet } } }", "variables": {"limit": 50, "fromDate": "'+ start_date +'"}}'
+
     print(f"Fetching meetings after: {start_date}")
-    synced_events_response = get_data_from_bq(synced_events_q)
+    kitrum_bq_json = json.loads(access_secret("kitrum-cloud", "kitrum_bq"))
+    credentials = service_account.Credentials.from_service_account_info(kitrum_bq_json)
+    bq_client = bigquery.Client(credentials=credentials, project=credentials.project_id)
+    synced_events_response = get_data_from_bq(bq_client, synced_events_q)
     print(f"Total Synced Events Fetched: {len(synced_events_response)}")
     synced_events = [x['transcript_id'] for x in synced_events_response]
+
+    RECRUITING_TOKENS = json.loads(access_secret("kitrum-cloud", "fireflies_recruiting"))
+    calendar_json = json.loads(access_secret("kitrum-cloud", "google_calendar_artem"))
+    drive_json = json.loads(access_secret("kitrum-cloud", "google_drive_artem"))
+
 
     all_results = []
     for user_email, user_data in RECRUITING_TOKENS.items():
@@ -51,12 +62,12 @@ def launch():
                 continue
             else:
                 synced_events.append(transcript_id)
-                run_query(delete_logs_q.replace("<tid>", transcript_id))
+                run_query(bq_client, delete_logs_q.replace("<tid>", transcript_id))
             meeting_name = meeting_details['title']
             meeting_date_unix = meeting_details['date']
             print(meeting_date_unix)
             print(f"\t1. Getting Event Attendees")
-            event_gcal = find_event_attendees(user_email, meeting_date_unix, meeting_name)
+            event_gcal = find_event_attendees(calendar_json, user_email, meeting_date_unix, meeting_name)
             if not event_gcal:
                 print("NOT GCAL")
                 continue
@@ -96,7 +107,7 @@ def launch():
                 continue
             time.sleep(2)
             print("\t4. Uploading Audio to Google Drive")
-            gdrive_audio_url = gdrive_upload(audio_path, 'audio', folder_id)
+            gdrive_audio_url = gdrive_upload(drive_json, audio_path, 'audio', folder_id)
             if not gdrive_audio_url:
                 sync_results.append({"transcript_id": transcript_id, "meeting_name": meeting_name, "user": user_email, "status": "error", "reason": "Error Occured While uploading Audio Record to Google Drive"})
                 continue
@@ -122,7 +133,7 @@ def launch():
                 else:
                     sync_results.append({"transcript_id": transcript_id, "meeting_name": meeting_name, "user": user_email, "status": "error", "reason": "Error Occured while updating Candidates in Zoho CRM"})
         if sync_results:
-            insert_to_bigquery(sync_results, "kitrum-cloud.logging.crm_fireflies_integration")
+            insert_to_bigquery(bq_client, sync_results, "kitrum-cloud.logging.crm_fireflies_integration")
             all_results.extend(sync_results)
     return all_results
 

@@ -1,15 +1,13 @@
 import time
-
 from google.auth.transport.requests import Request
 from google.oauth2.credentials import Credentials
 from google_auth_oauthlib.flow import InstalledAppFlow
 from googleapiclient.discovery import build
 from datetime import datetime
 from secret_manager import access_secret
-from new_config import calendar_json
 
 
-def find_event_attendees(calendar_id, search_date_unix, event_name):
+def find_event_attendees(calendar_json, calendar_id, search_date_unix, event_name):
     search_date = datetime.utcfromtimestamp(search_date_unix / 1000).strftime('%Y-%m-%d')
     scopes = ["https://www.googleapis.com/auth/calendar.readonly"]
     creds = Credentials.from_authorized_user_info(calendar_json, scopes)

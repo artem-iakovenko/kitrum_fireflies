@@ -1,18 +1,24 @@
 import requests
 import datetime
 from datetime import timedelta
-
+from secret_manager import access_secret
+import json
 
 class ZohoAuth:
-    def __init__(self, client_id, client_secret, refresh_token):
-        self.client_id = client_id
-        self.client_secret = client_secret
-        self.refresh_token = refresh_token
+    def __init__(self, source):
+        self.source = source
+        self.client_id = None
+        self.client_secret = None
+        self.refresh_token = None
         self.access_token = None
         self.expiration_date = None
 
     def get_or_refresh_access_token(self):
         if self.check_expiration():
+            oauth_creds = json.loads(access_secret("kitrum-cloud", self.source))
+            self.client_id = oauth_creds['client_id']
+            self.client_secret = oauth_creds['client_secret']
+            self.refresh_token = oauth_creds['refresh_token']
             access_token_response = requests.post(f'https://accounts.zoho.com/oauth/v2/token?refresh_token={self.refresh_token}&client_id={self.client_id}&client_secret={self.client_secret}&grant_type=refresh_token')
             if access_token_response.status_code == 200:
                 response_json = access_token_response.json()

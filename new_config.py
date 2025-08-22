@@ -12,11 +12,12 @@ oauth_credentials = {
     "zoho_crm": zcrm_oauth,
     "zoho_people": zp_oauth
 }
-TEAM_TOKENS = json.loads(access_secret("kitrum-cloud", "fireflies_cdm"))
-RECRUITING_TOKENS = json.loads(access_secret("kitrum-cloud", "fireflies_recruiting"))
-calendar_json = json.loads(access_secret("kitrum-cloud", "google_calendar_artem"))
-drive_json = json.loads(access_secret("kitrum-cloud", "google_drive_artem"))
-kitrum_bq_json = json.loads(access_secret("kitrum-cloud", "kitrum_bq"))
+
+# TEAM_TOKENS = json.loads(access_secret("kitrum-cloud", "fireflies_cdm"))
+# RECRUITING_TOKENS = json.loads(access_secret("kitrum-cloud", "fireflies_recruiting"))
+# calendar_json = json.loads(access_secret("kitrum-cloud", "google_calendar_artem"))
+# drive_json = json.loads(access_secret("kitrum-cloud", "google_drive_artem"))
+# kitrum_bq_json = json.loads(access_secret("kitrum-cloud", "kitrum_bq"))
 
 
 CALL_FOLDERS = {

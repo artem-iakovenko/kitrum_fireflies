@@ -1,18 +1,15 @@
-import importlib
 import os
-import time
-import new_config
 from api import api_request
 from fireflies import Fireflies
 from help_functions import download_file, gdrive_upload, get_note_body
 from gcalendar import find_event_attendees
-from bq import insert_to_bigquery
 from datetime import datetime, timedelta
-from new_config import TEAM_TOKENS, TEAM_OWNERS, CALL_FOLDERS, TRANSCRIPT_FOLDERS, COLORS_BY_INDEX
+from new_config import TEAM_OWNERS, CALL_FOLDERS, TRANSCRIPT_FOLDERS, COLORS_BY_INDEX
 from fpdf import FPDF
 import re
 from fpdf.enums import XPos, YPos
-
+import json
+from secret_manager import access_secret
 
 class FirefliesCrmIntegration:
     def __init__(self, user_email, user_token, user_team, crm_event_id, crm_main_contact_id,transcript_full_data, synced_events, visibility):
@@ -153,7 +150,6 @@ class FirefliesCrmIntegration:
             pdf.set_font("djv", style='I', size=8)
             pdf.set_text_color(0, 0, 0)
             pdf.multi_cell(0, 3, text=f"      {' '.join(sentence['text'])}")
-        print(self.event_name)
         # file_name = f"{self.convert_to_valid_filename(self.event_name)}.pdf"
         file_path = f"transcriptsPdf/{file_name}.pdf"
         pdf.output(file_path)
@@ -237,7 +233,7 @@ class FirefliesCrmIntegration:
         else:
             return "Potential"
 
-    def push_media_to_drive(self, file_name, video_url, audio_url, visibility):
+    def push_media_to_drive(self, drive_json, file_name, video_url, audio_url, visibility):
         media_url = video_url if video_url else audio_url
         media_type = "video" if video_url else "audio"
         main_folder_id = CALL_FOLDERS[self.user_team][visibility]
@@ -245,7 +241,7 @@ class FirefliesCrmIntegration:
         if media_url:
             try:
                 media_path = download_file(media_url, file_name, media_type)
-                gdrive_media_url = gdrive_upload(media_path, media_type, main_folder_id)
+                gdrive_media_url = gdrive_upload(drive_json, media_path, media_type, main_folder_id)
                 os.remove(media_path)
             except Exception as e:
                 print(e)
@@ -259,7 +255,6 @@ class FirefliesCrmIntegration:
             "put",
             {'data': [event_map]}
         )
-        print(create_meeting)
         try:
             crm_meeting_id = create_meeting['data'][0]['details']['id']
         except Exception as e:
@@ -287,9 +282,10 @@ class FirefliesCrmIntegration:
             "post",
             note_data
         )
-        print(note_response)
 
     def transcript_handler(self, transcript):
+        calendar_json = json.loads(access_secret("kitrum-cloud", "google_calendar_artem"))
+        drive_json = json.loads(access_secret("kitrum-cloud", "google_drive_artem"))
         event_date = transcript['date']
         default_datetime_start = datetime.fromtimestamp(event_date / 1000)
         default_datetime_end = default_datetime_start + timedelta(hours=1)
@@ -324,7 +320,6 @@ class FirefliesCrmIntegration:
             'crm_meeting_url': None,
             'action_datetime': formatted_datetime
         }
-        print(transcript_result)
 
         # host_email = transcript['host_email'] or self.user_email
         host_email = self.user_email
@@ -332,7 +327,7 @@ class FirefliesCrmIntegration:
         # GET GOOGLE CALENDAR EVENT
         google_calendar_found = False
         try:
-            event_gcal = find_event_attendees(host_email, meeting_date_unix, meeting_name)
+            event_gcal = find_event_attendees(calendar_json, host_email, meeting_date_unix, meeting_name)
         except Exception as e:
             print(e)
             event_gcal = {}
@@ -359,7 +354,7 @@ class FirefliesCrmIntegration:
         # PUSH CALL TO GOOGLE DRIVE
         audio_url, video_url = transcript['audio_url'], transcript['video_url']
         try:
-            drive_url = self.push_media_to_drive(file_name, audio_url, video_url, self.visibility)
+            drive_url = self.push_media_to_drive(drive_json, file_name, audio_url, video_url, self.visibility)
         except Exception as e:
             print(e)
             drive_url = None
@@ -369,7 +364,7 @@ class FirefliesCrmIntegration:
         if transcript_path:
             try:
                 transcript_folder_id = TRANSCRIPT_FOLDERS[self.user_team][self.visibility]
-                gdrive_transcript_url = gdrive_upload(transcript_path, "transcript", transcript_folder_id)
+                gdrive_transcript_url = gdrive_upload(drive_json, transcript_path, "transcript", transcript_folder_id)
                 os.remove(transcript_path)
             except Exception as e:
                 print(e)
@@ -395,7 +390,6 @@ class FirefliesCrmIntegration:
                 "Fireflies_Sync": True
             }
             crm_meeting_url = self.update_crm_meeting(event_map)
-            print(crm_meeting_url)
         except Exception as e:
             print("error while creating crm note")
             print(e)
@@ -416,14 +410,15 @@ class FirefliesCrmIntegration:
 
 
 def individual_meeting_sync(crm_meeting_id):
+    TEAM_TOKENS = json.loads(access_secret("kitrum-cloud", "fireflies_cdm"))
+
     crm_meeting_details = api_request(
         f"https://www.zohoapis.com/crm/v2/Events/{crm_meeting_id}",
         "zoho_crm",
         "get",
         None
     )['data'][0]
-    print(crm_meeting_details)
-    print(crm_meeting_details)
+
     main_contact = crm_meeting_details['Who_Id']
     main_contact_id = main_contact['id'] if main_contact else None
     # GET THIS DATA FROM CRM MEETING (IS RESTRICTED / TRANSCRIPT URL / USER EMAIL)
@@ -451,6 +446,7 @@ def individual_meeting_sync(crm_meeting_id):
 
 def cdm_meeting_sync(crm_meeting_id):
     # cdm_sync_result = individual_meeting_sync(crm_meeting_id)
+    # return None
     try:
         cdm_sync_result = individual_meeting_sync(crm_meeting_id)
         print(cdm_sync_result)

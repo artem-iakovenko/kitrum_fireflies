@@ -3,16 +3,8 @@ import requests
 from auth import ZohoAuth
 from new_config import oauth_credentials, success_status_codes
 
-zoho_people_auth = ZohoAuth(
-    oauth_credentials['zoho_people']['client_id'],
-    oauth_credentials['zoho_people']['client_secret'],
-    oauth_credentials['zoho_people']['refresh_token']
-)
-zoho_crm_auth = ZohoAuth(
-    oauth_credentials['zoho_crm']['client_id'],
-    oauth_credentials['zoho_crm']['client_secret'],
-    oauth_credentials['zoho_crm']['refresh_token']
-)
+zoho_people_auth = ZohoAuth("zoho_people")
+zoho_crm_auth = ZohoAuth("zoho_crm")
 
 
 def api_request(url, source, method, post_data):
@@ -30,6 +22,7 @@ def api_request(url, source, method, post_data):
         print("Unknown source")
         return None
     if access_headers:
+        print(access_headers)
         response = None
         if method == 'get':
             response = requests.get(url, headers=access_headers)

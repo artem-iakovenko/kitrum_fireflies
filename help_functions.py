@@ -10,7 +10,6 @@ from google.auth.transport.requests import Request
 from google.oauth2.credentials import Credentials
 from googleapiclient.discovery import build
 from googleapiclient.http import MediaFileUpload, MediaIoBaseDownload
-from new_config import drive_json
 ssl._create_default_https_context = ssl._create_unverified_context
 
 drive_scopes = ["https://www.googleapis.com/auth/drive"]
@@ -143,7 +142,7 @@ def download_file(file_url, file_name, folder_name):
         return None
 
 
-def gdrive_upload(file_path, file_type, parent_folder_id):
+def gdrive_upload(drive_json, file_path, file_type, parent_folder_id):
     try:
         # if file_type == 'video':
         #     parent_folder_id = "1WiB5EqCrQ2eJlKsHuNNKfly6-8jbfSRf"
